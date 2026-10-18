@@ -1,27 +1,43 @@
 name: Build APK
+
 on:
   push:
-    branches: [ main, master ]
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Unzip project
-        run: unzip -q -o GoogleTvNes.zip -d project
+
+      # Phone-friendly: if you uploaded GoogleTvNes.zip (or any .zip) instead of the folder, unpack it here.
+      - name: Locate project
+        run: |
+          if [ ! -f settings.gradle ]; then
+            z=$(ls *.zip 2>/dev/null | head -1)
+            if [ -n "$z" ]; then unzip -q -o "$z" -d _src; fi
+            f=$(find . -name settings.gradle -not -path "./.git/*" | head -1)
+            echo "PROJECT_DIR=$(dirname "$f")" >> "$GITHUB_ENV"
+          else
+            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+          fi
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.7"
-      - name: Build
-        run: |
-          DIR=$(dirname "$(find project -name settings.gradle.kts | head -1)")
-          gradle -p "$DIR" assembleDebug --no-daemon
+          gradle-version: '8.7'
+
+      - name: Build debug APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle assembleDebug --stacktrace
+
       - uses: actions/upload-artifact@v4
         with:
-          name: NesTV-debug-apk
-          path: project/**/build/outputs/apk/debug/app-debug.apk
+          name: NES-for-Google-TV-apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk

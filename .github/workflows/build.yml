@@ -1,47 +1,22 @@
 name: Build APK
-
 on:
   push:
+    branches: [ main, master ]
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      # Phone-friendly: if you uploaded GoogleTvNes.zip (or any .zip) instead of the folder, unpack it here.
-      - name: Locate project
-        run: |
-          if [ ! -f settings.gradle ]; then
-            z=$(ls *.zip 2>/dev/null | head -1)
-            if [ -n "$z" ]; then unzip -q -o "$z" -d _src; fi
-            f=$(find . -name settings.gradle -not -path "./.git/*" | head -1)
-            echo "PROJECT_DIR=$(dirname "$f")" >> "$GITHUB_ENV"
-          else
-            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
-          fi
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
-
-      # The runner image already ships the Android SDK; just accept licenses and make sure API 34 is there.
-      - name: Prepare Android SDK
-        run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" > /dev/null || true
-
+          java-version: 17
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.7'
-
-      - name: Build debug APK
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: gradle assembleDebug --stacktrace
-
+          gradle-version: "8.7"
+      - run: gradle assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:
-          name: NES-for-Google-TV-apk
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          name: NesTV-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk

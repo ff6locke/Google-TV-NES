@@ -52,8 +52,6 @@ jobs:
       - name: Repair and Clean build.gradle
         run: |
           set -e
-          
-          # Locating target file
           if [ -f app/build.gradle ]; then
             FILE=app/build.gradle
           elif [ -f build.gradle ]; then
@@ -63,67 +61,70 @@ jobs:
             exit 0
           fi
           
-          echo "Cleaning up corrupted injections from file: $FILE"
-          
           python3 - "$FILE" <<'PY'
           import re, sys
           path = sys.argv[1]
           src = open(path).read()
-
-          # Strip out any broken injected blocks containing 'org' or task structures
           clean_src = re.sub(r'tasks\.withType\(org\..*?\}\s*\}', '', src, flags=re.S)
           clean_src = re.sub(r'tasks\.withType\(org\..*?\}', '', clean_src, flags=re.S)
           clean_src = re.sub(r'kotlinOptions\s*\{.*?\}', '', clean_src, flags=re.S)
-          
           open(path, 'w').write(clean_src)
-          print("Cleaned file contents saved successfully.")
           PY
-          echo "----- Repaired build file layout -----"
-          cat "$FILE"
+        working-directory: ${{ env.PROJECT_DIR }}
+
+      - name: Patch EmuActivity Java Lambda Variable Clash
+        run: |
+          set -e
+          
+          # Dynamically search for EmuActivity.java anywhere inside the project
+          FILE=$(find . -type f -name "EmuActivity.java" | head -n 1)
+          
+          if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
+            echo "WARNING: EmuActivity.java could not be found automatically."
+            exit 0
+          fi
+          
+          echo "Patching lambda naming conflict inside: $FILE"
+          
+          python3 - "$FILE" <<'PY'
+          import sys
+          path = sys.argv[1]
+          src = open(path).read()
+
+          # Replace the specific clashing variable assignment inside OnLayoutChangeListener
+          old_lambda = "v, l, t, r, b, ol, ot, or, ob"
+          new_lambda = "v, l, t, r, bottom, ol, ot, or, ob"
+          
+          if old_lambda in src:
+              src = src.replace(old_lambda, new_lambda)
+              print("Successfully renamed lambda parameter 'b' to 'bottom'")
+          else:
+              print("Target lambda signature not matched or already patched")
+              
+          open(path, 'w').write(src)
+          PY
         working-directory: ${{ env.PROJECT_DIR }}
 
       - name: Patch InputMap.kt JVM clash
         run: |
           set -e
-          
-          # Dynamically search for any Kotlin file containing the clashing signature
-          echo "Searching for files defining setAssist..."
           FILE=$(grep -rl 'fun setAssist' . | grep '\.kt$' | head -n 1)
-          
           if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
-            echo "WARNING: Could not find any Kotlin file containing 'fun setAssist'."
-            echo "Listing all Kotlin source files found in the extracted repository instead:"
-            find . -type f -name "*.kt" || true
-            echo "Proceeding without patching InputMap.kt to see if the build handles it..."
             exit 0
           fi
-          
-          echo "Found signature match file to patch: $FILE"
           
           python3 - "$FILE" <<'PY'
           import re, sys
           path = sys.argv[1]
           src = open(path).read()
-
-          # Ensure JvmName import exists
           if 'import kotlin.jvm.JvmName' not in src:
               m = re.search(r'^package\s+\S+\s*$', src, flags=re.M)
               if m:
                   src = src[:m.end()] + '\nimport kotlin.jvm.JvmName\n' + src[m.end():]
-              else:
-                  src = 'import kotlin.jvm.JvmName\n' + src
-
-          # Annotate the hand-written setAssist(on: Boolean) function
           pattern = re.compile(r'(\n\s*)(fun\s+setAssist\s*\(\s*\w+\s*:\s*Boolean\s*\))')
           new_src, n = pattern.subn(r'\1@JvmName("applyAssist")\1\2', src)
-          if n == 0:
-              print("WARNING: hand-written setAssist(...Boolean) not found", file=sys.stderr)
-          else:
-              print(f"Annotated {n} setAssist definition(s)")
           open(path, 'w').write(new_src)
           PY
-          echo "----- patched file around setAssist -----"
-          grep -n -A2 -B1 'applyAssist\|setAssist' "$FILE" | head -40 || true
         working-directory: ${{ env.PROJECT_DIR }}
 
       - name: Write local.properties
@@ -132,7 +133,6 @@ jobs:
 
       - name: Build debug APK
         run: |
-          # Safe external property flags to bypass direct file modification limits
           gradle assembleDebug \
             -Dorg.gradle.java.home=$JAVA_HOME \
             -Pandroid.kotlinOptions.jvmTarget=17

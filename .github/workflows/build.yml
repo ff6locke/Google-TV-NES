@@ -64,8 +64,6 @@ jobs:
             FILE=build.gradle
           else
             echo "ERROR: Could not find build.gradle(.kts) in app/ or root directory."
-            ls -la
-            ls -la app/ || true
             exit 1
           fi
           
@@ -76,40 +74,44 @@ jobs:
           path = sys.argv[1]
           src = open(path).read()
 
-          # Strip existing compileOptions / kotlinOptions blocks safely
-          src = re.sub(r'\n\s*compileOptions\s*\{[^}]*\}', '', src, flags=re.S)
-          src = re.sub(r'\n\s*kotlinOptions\s*\{[^}]*\}', '', src, flags=re.S)
-
-          # Determine formatting syntax base (Kotlin vs Groovy script compatibility)
+          # Safe injection code block preserving compatibility configurations
           if path.endswith('.kts'):
               inject = '''
-                  compileOptions {
-                      sourceCompatibility = JavaVersion.VERSION_17
-                      targetCompatibility = JavaVersion.VERSION_17
-                  }
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
                   kotlinOptions {
                       jvmTarget = "17"
                   }
+              }
               '''
           else:
               inject = '''
-                  compileOptions {
-                      sourceCompatibility JavaVersion.VERSION_17
-                      targetCompatibility JavaVersion.VERSION_17
-                  }
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
                   kotlinOptions {
                       jvmTarget = "17"
                   }
+              }
               '''
 
+          # Safely append targets to the end of the android block without clearing configurations
           m = re.search(r'android\s*\{', src)
           if not m:
               print("ERROR: no android { block found in build file", file=sys.stderr)
               sys.exit(1)
+          
           src = src[:m.end()] + inject + src[m.end():]
           open(path, 'w').write(src)
-          print("Patched compiler targets successfully inside:", path)
+          print("Patched JVM compiler targets successfully inside:", path)
           PY
+          echo "----- patched build file snippet -----"
+          head -n 35 "$FILE"
         working-directory: ${{ env.PROJECT_DIR }}
 
       - name: Patch InputMap.kt JVM clash
@@ -165,7 +167,7 @@ jobs:
         working-directory: ${{ env.PROJECT_DIR }}
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        uses: actions/uses/upload-artifact@v4
         with:
           name: GoogleTvNes-Android-APK
           path: ${{ env.PROJECT_DIR }}/**/build/outputs/apk/debug/*.apk

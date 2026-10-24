@@ -19,7 +19,7 @@ jobs:
       - name: Extract Android project
         run: |
           set -e
-          if [ ! -f GoogleTvNed.zip ]; then
+          if [ ! -f GoogleTvNes.zip ]; then
             echo "ERROR: GoogleTvNes.zip not found in repo root"
             exit 1
           fi

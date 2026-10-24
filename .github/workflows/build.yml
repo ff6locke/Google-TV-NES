@@ -84,25 +84,33 @@ jobs:
             exit 0
           fi
           
-          echo "Patching lambda naming conflict inside: $FILE"
+          echo "Patching lambda parameter and usage scope inside: $FILE"
           
           python3 - "$FILE" <<'PY'
           import sys
           path = sys.argv[1]
           src = open(path).read()
 
-          # Replace the specific clashing variable assignment inside OnLayoutChangeListener
+          # Replace the clashing definition parameter inside the layout listener
           old_lambda = "v, l, t, r, b, ol, ot, or, ob"
           new_lambda = "v, l, t, r, bottom, ol, ot, or, ob"
           
           if old_lambda in src:
               src = src.replace(old_lambda, new_lambda)
-              print("Successfully renamed lambda parameter 'b' to 'bottom'")
-          else:
-              print("Target lambda signature not matched or already patched")
+              print("Successfully renamed lambda registration parameter 'b' to 'bottom'")
+          
+          # Replace the inner expression formula math usage to prevent system Bundle proxy errors
+          old_expr = "b - t"
+          new_expr = "bottom - t"
+          
+          if old_expr in src:
+              src = src.replace(old_expr, new_expr)
+              print("Successfully changed internal math call 'b - t' to 'bottom - t'")
               
           open(path, 'w').write(src)
           PY
+          echo "----- Verification of patched listener segment -----"
+          grep -n -C3 "setSystemGestureExclusionRects" "$FILE" || true
         working-directory: ${{ env.PROJECT_DIR }}
 
       - name: Patch InputMap.kt JVM clash

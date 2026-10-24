@@ -1,4 +1,4 @@
-name: Build NesTV APK
+name: Build GoogleTV Nes APK
 
 on:
   workflow_dispatch:
@@ -23,7 +23,7 @@ jobs:
             echo "ERROR: GoogleTvNes.zip not found in repo root"
             exit 1
           fi
-          unzip -o NesTV.zip -d extracted
+          unzip -o GoogleTvNes.zip -d extracted
           PROJECT_DIR=$(find extracted -maxdepth 3 -type f \( -name "settings.gradle.kts" -o -name "settings.gradle" \) -printf '%h\n' | head -n 1)
           if [ -z "$PROJECT_DIR" ]; then
             echo "ERROR: No Gradle settings file found in extracted zip"

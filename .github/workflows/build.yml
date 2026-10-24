@@ -115,11 +115,19 @@ jobs:
       - name: Patch InputMap.kt JVM clash
         run: |
           set -e
-          FILE=app/src/main/java/com/nestv/InputMap.kt
-          if [ ! -f "$FILE" ]; then
-            echo "ERROR: $FILE not found"
+          
+          # Dynamically search for InputMap.kt file anywhere inside the project folder
+          FILE=$(find . -type f -name "InputMap.kt" | head -n 1)
+          
+          if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
+            echo "ERROR: InputMap.kt could not be found anywhere inside the project structure."
+            echo "Printing structure of source folder for reference:"
+            find . -maxdepth 5 -type d
             exit 1
           fi
+          
+          echo "Found file to patch: $FILE"
+          
           python3 - "$FILE" <<'PY'
           import re, sys
           path = sys.argv[1]

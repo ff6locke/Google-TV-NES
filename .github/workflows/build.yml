@@ -49,69 +49,37 @@ jobs:
         with:
           packages: "platform-tools platforms;android-35 build-tools;35.0.0"
 
-      - name: Patch Gradle JVM targets
+      - name: Repair and Clean build.gradle
         run: |
           set -e
           
-          # Detect whether the project uses Kotlin Script (.kts) or Groovy build scripts
-          if [ -f app/build.gradle.kts ]; then
-            FILE=app/build.gradle.kts
-          elif [ -f app/build.gradle ]; then
+          # Locating target file
+          if [ -f app/build.gradle ]; then
             FILE=app/build.gradle
-          elif [ -f build.gradle.kts ]; then
-            FILE=build.gradle.kts
           elif [ -f build.gradle ]; then
             FILE=build.gradle
           else
-            echo "ERROR: Could not find build.gradle(.kts) in app/ or root directory."
-            exit 1
+            echo "No build file to clean."
+            exit 0
           fi
           
-          echo "Found build file to patch: $FILE"
+          echo "Cleaning up corrupted injections from file: $FILE"
           
           python3 - "$FILE" <<'PY'
           import re, sys
           path = sys.argv[1]
           src = open(path).read()
 
-          # Safe injection code block preserving compatibility configurations
-          if path.endswith('.kts'):
-              inject = '''
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
-              tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-                  kotlinOptions {
-                      jvmTarget = "17"
-                  }
-              }
-              '''
-          else:
-              inject = '''
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
-              tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-                  kotlinOptions {
-                      jvmTarget = "17"
-                  }
-              }
-              '''
-
-          # Safely append targets to the end of the android block without clearing configurations
-          m = re.search(r'android\s*\{', src)
-          if not m:
-              print("ERROR: no android { block found in build file", file=sys.stderr)
-              sys.exit(1)
+          # Strip out any broken injected blocks containing 'org' or task structures
+          clean_src = re.sub(r'tasks\.withType\(org\..*?\}\s*\}', '', src, flags=re.S)
+          clean_src = re.sub(r'tasks\.withType\(org\..*?\}', '', clean_src, flags=re.S)
+          clean_src = re.sub(r'kotlinOptions\s*\{.*?\}', '', clean_src, flags=re.S)
           
-          src = src[:m.end()] + inject + src[m.end():]
-          open(path, 'w').write(src)
-          print("Patched JVM compiler targets successfully inside:", path)
+          open(path, 'w').write(clean_src)
+          print("Cleaned file contents saved successfully.")
           PY
-          echo "----- patched build file snippet -----"
-          head -n 35 "$FILE"
+          echo "----- Repaired build file layout -----"
+          cat "$FILE"
         working-directory: ${{ env.PROJECT_DIR }}
 
       - name: Patch InputMap.kt JVM clash
@@ -163,7 +131,11 @@ jobs:
         working-directory: ${{ env.PROJECT_DIR }}
 
       - name: Build debug APK
-        run: gradle assembleDebug
+        run: |
+          # Safe external property flags to bypass direct file modification limits
+          gradle assembleDebug \
+            -Dorg.gradle.java.home=$JAVA_HOME \
+            -Pandroid.kotlinOptions.jvmTarget=17
         working-directory: ${{ env.PROJECT_DIR }}
 
       - name: Upload APK

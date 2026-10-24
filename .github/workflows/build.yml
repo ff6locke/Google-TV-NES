@@ -167,7 +167,7 @@ jobs:
         working-directory: ${{ env.PROJECT_DIR }}
 
       - name: Upload APK
-        uses: actions/uses/upload-artifact@v4
+        uses: actions/upload-artifact@v4
         with:
           name: GoogleTvNes-Android-APK
           path: ${{ env.PROJECT_DIR }}/**/build/outputs/apk/debug/*.apk

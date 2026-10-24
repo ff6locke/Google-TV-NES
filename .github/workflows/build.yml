@@ -52,39 +52,64 @@ jobs:
       - name: Patch Gradle JVM targets
         run: |
           set -e
+          
+          # Detect whether the project uses Kotlin Script (.kts) or Groovy build scripts
           if [ -f app/build.gradle.kts ]; then
             FILE=app/build.gradle.kts
-            python3 - "$FILE" <<'PY'
+          elif [ -f app/build.gradle ]; then
+            FILE=app/build.gradle
+          elif [ -f build.gradle.kts ]; then
+            FILE=build.gradle.kts
+          elif [ -f build.gradle ]; then
+            FILE=build.gradle
+          else
+            echo "ERROR: Could not find build.gradle(.kts) in app/ or root directory."
+            ls -la
+            ls -la app/ || true
+            exit 1
+          fi
+          
+          echo "Found build file to patch: $FILE"
+          
+          python3 - "$FILE" <<'PY'
           import re, sys
           path = sys.argv[1]
           src = open(path).read()
 
-          # Strip existing compileOptions / kotlinOptions blocks
+          # Strip existing compileOptions / kotlinOptions blocks safely
           src = re.sub(r'\n\s*compileOptions\s*\{[^}]*\}', '', src, flags=re.S)
           src = re.sub(r'\n\s*kotlinOptions\s*\{[^}]*\}', '', src, flags=re.S)
 
-          inject = '''
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
-              kotlinOptions {
-                  jvmTarget = "17"
-              }
-          '''
+          # Determine formatting syntax base (Kotlin vs Groovy script compatibility)
+          if path.endswith('.kts'):
+              inject = '''
+                  compileOptions {
+                      sourceCompatibility = JavaVersion.VERSION_17
+                      targetCompatibility = JavaVersion.VERSION_17
+                  }
+                  kotlinOptions {
+                      jvmTarget = "17"
+                  }
+              '''
+          else:
+              inject = '''
+                  compileOptions {
+                      sourceCompatibility JavaVersion.VERSION_17
+                      targetCompatibility JavaVersion.VERSION_17
+                  }
+                  kotlinOptions {
+                      jvmTarget = "17"
+                  }
+              '''
 
           m = re.search(r'android\s*\{', src)
           if not m:
-              print("ERROR: no android { block", file=sys.stderr)
+              print("ERROR: no android { block found in build file", file=sys.stderr)
               sys.exit(1)
           src = src[:m.end()] + inject + src[m.end():]
           open(path, 'w').write(src)
-          print("Patched", path)
+          print("Patched compiler targets successfully inside:", path)
           PY
-          else
-            echo "ERROR: app/build.gradle.kts not found"
-            exit 1
-          fi
         working-directory: ${{ env.PROJECT_DIR }}
 
       - name: Patch InputMap.kt JVM clash

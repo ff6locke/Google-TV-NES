@@ -116,17 +116,19 @@ jobs:
         run: |
           set -e
           
-          # Dynamically search for InputMap.kt file anywhere inside the project folder
-          FILE=$(find . -type f -name "InputMap.kt" | head -n 1)
+          # Dynamically search for any Kotlin file containing the clashing signature
+          echo "Searching for files defining setAssist..."
+          FILE=$(grep -rl 'fun setAssist' . | grep '\.kt$' | head -n 1)
           
           if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
-            echo "ERROR: InputMap.kt could not be found anywhere inside the project structure."
-            echo "Printing structure of source folder for reference:"
-            find . -maxdepth 5 -type d
-            exit 1
+            echo "WARNING: Could not find any Kotlin file containing 'fun setAssist'."
+            echo "Listing all Kotlin source files found in the extracted repository instead:"
+            find . -type f -name "*.kt" || true
+            echo "Proceeding without patching InputMap.kt to see if the build handles it..."
+            exit 0
           fi
           
-          echo "Found file to patch: $FILE"
+          echo "Found signature match file to patch: $FILE"
           
           python3 - "$FILE" <<'PY'
           import re, sys
@@ -166,5 +168,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: GoogleTvNes-Android-APK
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
+          path: ${{ env.PROJECT_DIR }}/**/build/outputs/apk/debug/*.apk
           if-no-files-found: error
